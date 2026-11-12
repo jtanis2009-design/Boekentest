@@ -248,14 +248,26 @@ service cloud.firestore {
         <div><label for="fPages">Pagina's</label><input id="fPages" type="number" min="0" inputmode="numeric"></div>
         <div><label for="fYear">Jaar van uitgave</label><input id="fYear" type="number" min="0" max="2100" inputmode="numeric"></div>
       </div>
-      <div class="grid2">
-        <div><label for="fStatus">Status</label>
-          <select id="fStatus">
-            <option value="gelezen">Gelezen</option>
-            <option value="bezig">Bezig met lezen</option>
-            <option value="wil">Wil ik lezen</option>
-          </select></div>
-        <div id="dateWrap"><label for="fDate">Uitgelezen op</label><input id="fDate" type="date"></div>
+      <label for="fStatus">Status</label>
+      <select id="fStatus">
+        <option value="gelezen">Gelezen</option>
+        <option value="bezig">Bezig met lezen</option>
+        <option value="wil">Wil ik lezen</option>
+      </select>
+      <div id="dateWrap">
+        <label for="fPrec">Wanneer uitgelezen?</label>
+        <select id="fPrec">
+          <option value="dag">Precieze datum</option>
+          <option value="maand">Alleen maand en jaar</option>
+          <option value="jaar">Alleen het jaar</option>
+          <option value="geen">Weet ik niet meer</option>
+        </select>
+        <div class="row" style="margin-top:8px" id="dateInputs">
+          <input id="fDate" type="date" aria-label="Datum">
+          <select id="fDMonth" aria-label="Maand"></select>
+          <input id="fDYear" type="number" min="1900" inputmode="numeric" placeholder="Jaar" aria-label="Jaar">
+        </div>
+        <div class="muted" id="dateHint" style="margin-top:6px"></div>
       </div>
       <label>Beoordeling</label>
       <div class="stars" id="fStars"></div>
@@ -362,8 +374,15 @@ const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.get
 const today = () => ymd(new Date());
 function monday(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 function isoWeek(d){ const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day); const y0 = new Date(Date.UTC(x.getUTCFullYear(), 0, 1)); return Math.ceil(((x - y0) / 864e5 + 1) / 7); }
-const nlDate = s => { const d = new Date(s + 'T00:00'); return isNaN(d) ? '' : d.toLocaleDateString('nl-NL', {day:'numeric', month:'short', year:'numeric'}); };
 const MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const MONTHS_FULL = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+// Leesdatum kan een dag (2024-03-15), een maand (2024-03) of alleen een jaar (2024) zijn.
+const nlDate = s => {
+  s = String(s || '');
+  if (/^\d{4}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s)) return MONTHS[+s.slice(5) - 1] + ' ' + s.slice(0, 4);
+  const d = new Date(s + 'T00:00'); return isNaN(d) ? '' : d.toLocaleDateString('nl-NL', {day:'numeric', month:'short', year:'numeric'});
+};
 const STATUS = {gelezen:'Gelezen', bezig:'Bezig', wil:'Wil ik lezen'};
 
 /* ---------- thema ---------- */
@@ -564,18 +583,43 @@ $('#bookList').addEventListener('click', e => { const b = e.target.closest('[dat
 let editId = null, rating = 0;
 function drawStars(){ $('#fStars').innerHTML = [1,2,3,4,5].map(n => `<button type="button" data-n="${n}" class="${n <= rating ? 'on' : ''}" aria-label="${n} sterren">★</button>`).join(''); }
 $('#fStars').addEventListener('click', e => { const b = e.target.closest('[data-n]'); if (!b) return; const n = +b.dataset.n; rating = rating === n ? 0 : n; drawStars(); });
+$('#fDMonth').innerHTML = MONTHS_FULL.map((m, i) => `<option value="${pad(i + 1)}">${m}</option>`).join('');
 function syncDate(){
-  const read = $('#fStatus').value === 'gelezen';
-  $('#dateWrap').style.visibility = read ? 'visible' : 'hidden';
-  if (read && !$('#fDate').value) $('#fDate').value = today();
+  const read = $('#fStatus').value === 'gelezen', prec = $('#fPrec').value;
+  $('#dateWrap').hidden = !read;
+  $('#fDate').hidden = prec !== 'dag';
+  $('#fDMonth').hidden = prec !== 'maand';
+  $('#fDYear').hidden = prec !== 'maand' && prec !== 'jaar';
+  $('#dateInputs').hidden = prec === 'geen';
+  $('#fDate').max = today(); $('#fDYear').max = new Date().getFullYear();
+  if (prec === 'dag' && !$('#fDate').value) $('#fDate').value = today();
+  if (!$('#fDYear').value) $('#fDYear').value = new Date().getFullYear();
+  $('#dateHint').textContent = prec === 'geen' ? 'Het boek telt mee in je totaal, maar niet in de grafieken per week, maand of jaar.'
+    : prec === 'jaar' ? 'Het boek telt mee in dat jaar.' : prec === 'maand' ? 'Het boek telt mee in die maand en dat jaar.' : '';
+}
+function readDate(){
+  const prec = $('#fPrec').value, y = parseInt($('#fDYear').value, 10);
+  if (prec === 'geen') return '';
+  if (prec === 'dag') return $('#fDate').value || today();
+  if (!(y >= 1000 && y <= 9999)) return null;
+  return prec === 'jaar' ? String(y) : y + '-' + $('#fDMonth').value;
+}
+function writeDate(s){
+  s = String(s || '');
+  if (/^\d{4}$/.test(s)){ $('#fPrec').value = 'jaar'; $('#fDYear').value = s; }
+  else if (/^\d{4}-\d{2}$/.test(s)){ $('#fPrec').value = 'maand'; $('#fDYear').value = s.slice(0, 4); $('#fDMonth').value = s.slice(5); }
+  else if (s){ $('#fPrec').value = 'dag'; $('#fDate').value = s; }
+  else $('#fPrec').value = 'geen';
 }
 $('#fStatus').addEventListener('change', syncDate);
+$('#fPrec').addEventListener('change', syncDate);
 function resetForm(){
   editId = null; rating = 0;
   lookupFilled = false;
   $('#bookForm').reset(); $('#fIsbn').value = ''; $('#fCover').value = ''; $('#lookupMsg').textContent = '';
   $('#formTitle').textContent = 'Boek toevoegen'; $('#deleteBtn').hidden = true; $('#saveBtn').textContent = 'Opslaan';
-  $('#fDate').value = today(); drawStars(); syncDate();
+  $('#fPrec').value = 'dag'; $('#fDate').value = today(); $('#fDMonth').value = pad(new Date().getMonth() + 1); $('#fDYear').value = '';
+  drawStars(); syncDate();
 }
 function editBook(id){
   const b = books.find(x => x.id === id); if (!b) return;
@@ -583,7 +627,7 @@ function editBook(id){
   $('#formTitle').textContent = 'Boek bewerken'; $('#deleteBtn').hidden = false; $('#saveBtn').textContent = 'Wijzigingen opslaan';
   $('#fIsbn').value = b.isbn || ''; $('#fTitle').value = b.title || ''; $('#fAuthor').value = b.author || '';
   $('#fPages').value = b.pages || ''; $('#fYear').value = b.year || ''; $('#fStatus').value = b.status || 'gelezen';
-  $('#fDate').value = b.dateRead || ''; $('#fNotes').value = b.notes || ''; $('#fCover').value = b.cover || '';
+  if (b.status === 'gelezen') writeDate(b.dateRead); $('#fNotes').value = b.notes || ''; $('#fCover').value = b.cover || '';
   drawStars(); syncDate(); go('toevoegen');
 }
 $('#bookForm').onsubmit = e => {
@@ -591,6 +635,8 @@ $('#bookForm').onsubmit = e => {
   const status = $('#fStatus').value, isbn = cleanIsbn($('#fIsbn').value);
   const title = $('#fTitle').value.trim(), author = $('#fAuthor').value.trim();
   if (!title || !author) return;
+  const dateRead = status === 'gelezen' ? readDate() : '';
+  if (dateRead === null){ toast('Vul het jaar in waarin je het boek hebt gelezen.'); $('#fDYear').focus(); return; }
   if (!editId){
     const dup = books.find(b => (isbn && b.isbn === isbn) || (norm(b.title) === norm(title) && norm(b.author) === norm(author)));
     if (dup && !confirm('"' + dup.title + '" staat al in je lijst. Toch nog een keer toevoegen?')) return;
@@ -601,7 +647,7 @@ $('#bookForm').onsubmit = e => {
     pages: parseInt($('#fPages').value, 10) || 0,
     year: parseInt($('#fYear').value, 10) || 0,
     status,
-    dateRead: status === 'gelezen' ? ($('#fDate').value || today()) : '',
+    dateRead,
     rating, notes: $('#fNotes').value.trim(), cover: $('#fCover').value,
     addedAt: old && old.addedAt ? old.addedAt : Date.now()
   });
@@ -739,7 +785,8 @@ const authorsOf = b => String(b.author || '').split(/\s*(?:&|;)\s*/).map(s => s.
 function renderStats(){
   const read = books.filter(b => b.status === 'gelezen' && b.dateRead);
   const now = new Date(), wk = ymd(monday(now)), mo = today().slice(0, 7), yr = today().slice(0, 4);
-  $('#kWeek').textContent = read.filter(b => b.dateRead >= wk).length;
+  const exact = read.filter(b => b.dateRead.length === 10);
+  $('#kWeek').textContent = exact.filter(b => b.dateRead >= wk).length;
   $('#kMonth').textContent = read.filter(b => b.dateRead.startsWith(mo)).length;
   $('#kYear').textContent = read.filter(b => b.dateRead.startsWith(yr)).length;
 
@@ -749,7 +796,7 @@ function renderStats(){
     for (let i = 11; i >= 0; i--){
       const s = new Date(m); s.setDate(s.getDate() - i * 7); const e = new Date(s); e.setDate(e.getDate() + 7);
       const a = ymd(s), z = ymd(e);
-      data.push({label: 'wk ' + isoWeek(s), n: read.filter(b => b.dateRead >= a && b.dateRead < z).length});
+      data.push({label: 'wk ' + isoWeek(s), n: exact.filter(b => b.dateRead >= a && b.dateRead < z).length});
     }
   } else if (period === 'maand'){
     for (let i = 11; i >= 0; i--){
@@ -807,7 +854,7 @@ $('#importFile').onchange = async e => {
       if (!b || !b.title || !b.author) return;
       const k = norm(b.title) + '|' + norm(b.author); if (have.has(k)) return; have.add(k); n++;
       store.save(null, { title: String(b.title), author: String(b.author), isbn: cleanIsbn(b.isbn), pages: +b.pages || 0, year: +b.year || 0,
-        status: STATUS[b.status] ? b.status : 'gelezen', dateRead: /^\d{4}-\d{2}-\d{2}$/.test(b.dateRead) ? b.dateRead : '',
+        status: STATUS[b.status] ? b.status : 'gelezen', dateRead: /^\d{4}(-\d{2}(-\d{2})?)?$/.test(b.dateRead) ? b.dateRead : '',
         rating: Math.min(5, Math.max(0, +b.rating || 0)), notes: String(b.notes || ''), cover: /^https:\/\//.test(b.cover) ? b.cover : '', addedAt: +b.addedAt || Date.now() });
     });
     toast(n + (n === 1 ? ' boek' : ' boeken') + ' teruggezet');
