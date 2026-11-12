@@ -180,6 +180,24 @@ nav.tabs button.on{color:var(--accent)}
 </section>
 
 <main class="wrap" id="app" hidden>
+  <div class="card" id="rulesHelp" hidden style="border-color:var(--danger)">
+    <h2 style="color:var(--danger)">Opslaan is geblokkeerd door Firebase</h2>
+    <p style="margin:0 0 8px">Je bent ingelogd, maar de Firestore-regels laten nog niet toe dat je boeken opslaat. Zo los je het op:</p>
+    <ol style="margin:0 0 8px;padding-left:20px">
+      <li>Open <a id="rulesLink" href="#" target="_blank" rel="noopener" style="color:var(--accent)">Firestore → Rules</a></li>
+      <li>Verwijder alles wat er staat en plak de regels hieronder</li>
+      <li>Klik op <b>Publish</b> en ververs deze pagina</li>
+    </ol>
+    <textarea id="rulesText" readonly style="font-family:monospace;font-size:12px;min-height:170px">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/books/{book} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}</textarea>
+    <button class="ghost" id="rulesCopy" style="width:100%;margin-top:8px">Regels kopiëren</button>
+  </div>
 
   <!-- BOEKEN -->
   <section id="view-boeken">
@@ -218,6 +236,7 @@ nav.tabs button.on{color:var(--accent)}
         <button class="ghost fit" id="lookupBtn">Opzoeken</button>
       </div>
       <div class="muted" id="lookupMsg" style="margin-top:6px"></div>
+      <div class="muted" style="margin-top:8px">Geen barcode of niet gevonden? Vul het boek hieronder zelf in.</div>
     </div>
     <form class="card" id="bookForm">
       <label for="fTitle">Titel *</label>
@@ -364,11 +383,18 @@ const cfg = window.FIREBASE_CONFIG;
 const CLOUD = !!(cfg && cfg.apiKey && !/^PLAK/i.test(cfg.apiKey) && window.firebase);
 let books = [], auth = null, db = null, col = null, unsub = null, user = null;
 
+function dbError(e){
+  if (e && e.code === 'permission-denied'){
+    $('#rulesLink').href = 'https://console.firebase.google.com/project/' + encodeURIComponent((cfg || {}).projectId || '_') + '/firestore/rules';
+    $('#rulesHelp').hidden = false; go('boeken');
+    toast('Opslaan geblokkeerd: Firestore-regels staan nog niet goed.');
+  } else toast('Er ging iets mis met de database' + (e && e.code ? ' (' + e.code + ')' : '') + '.');
+}
 const store = {
   save(id, data){
     if (CLOUD){
       const ref = id ? col.doc(id) : col.doc();
-      ref.set(data).catch(e => toast('Opslaan mislukt: ' + e.message));
+      ref.set(data).catch(dbError);
     } else {
       if (id){ const i = books.findIndex(b => b.id === id); if (i >= 0) books[i] = {id, ...data}; }
       else books.push({id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...data});
@@ -376,7 +402,7 @@ const store = {
     }
   },
   remove(id){
-    if (CLOUD) col.doc(id).delete().catch(e => toast('Verwijderen mislukt: ' + e.message));
+    if (CLOUD) col.doc(id).delete().catch(dbError);
     else { books = books.filter(b => b.id !== id); ls.set('bc_books', books); renderAll(); }
   }
 };
@@ -402,7 +428,7 @@ if (CLOUD){
     if (!u){ $('#app').hidden = true; $('#tabs').hidden = true; $('#authView').hidden = false; return; }
     col = db.collection('users').doc(u.uid).collection('books');
     unsub = col.onSnapshot(s => { books = s.docs.map(d => ({id: d.id, ...d.data()})); renderAll(); },
-      e => toast('Kan boeken niet laden: ' + e.message));
+      dbError);
     startApp();
   });
 } else {
@@ -463,6 +489,12 @@ $('#authReset').onclick = async () => {
   catch(err){ $('#authErr').textContent = authMsg(err); }
 };
 $('#logoutBtn').onclick = () => { if (confirm('Wil je uitloggen?')) auth.signOut(); };
+
+$('#rulesCopy').onclick = async () => {
+  const t = $('#rulesText');
+  try{ await navigator.clipboard.writeText(t.value); toast('Regels gekopieerd'); }
+  catch(e){ t.select(); toast('Selecteer de tekst en kopieer hem zelf.'); }
+};
 
 /* ---------- navigatie ---------- */
 let view = 'boeken';
@@ -540,6 +572,7 @@ function syncDate(){
 $('#fStatus').addEventListener('change', syncDate);
 function resetForm(){
   editId = null; rating = 0;
+  lookupFilled = false;
   $('#bookForm').reset(); $('#fIsbn').value = ''; $('#fCover').value = ''; $('#lookupMsg').textContent = '';
   $('#formTitle').textContent = 'Boek toevoegen'; $('#deleteBtn').hidden = true; $('#saveBtn').textContent = 'Opslaan';
   $('#fDate').value = today(); drawStars(); syncDate();
@@ -589,38 +622,57 @@ async function fetchJson(url){
   try{ const r = await fetch(url, {signal: c.signal}); if (!r.ok) throw new Error(r.status); return await r.json(); }
   finally{ clearTimeout(t); }
 }
-async function lookupIsbn(isbn){
-  try{
-    const j = await fetchJson('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn);
-    const v = j.items && j.items[0] && j.items[0].volumeInfo;
-    if (v && v.title){
-      const img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
-      return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).join(' & '),
-        pages: v.pageCount || 0, year: parseInt(String(v.publishedDate || '').slice(0, 4), 10) || 0,
-        cover: img ? img.replace(/^http:/, 'https:') : '' };
-    }
-  }catch(e){}
-  try{
-    const j = await fetchJson('https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn + '&format=json&jscmd=data');
-    const v = j['ISBN:' + isbn];
-    if (v && v.title){
-      const y = String(v.publish_date || '').match(/\d{4}/);
-      return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).map(a => a.name).join(' & '),
-        pages: v.number_of_pages || 0, year: y ? +y[0] : 0, cover: (v.cover && (v.cover.medium || v.cover.small)) || '' };
-    }
-  }catch(e){}
-  return null;
+async function fromGoogle(isbn){
+  const j = await fetchJson('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&country=NL');
+  const v = j.items && j.items[0] && j.items[0].volumeInfo;
+  if (!v || !v.title) return null;
+  const img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
+  return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).join(' & '),
+    pages: v.pageCount || 0, year: parseInt(String(v.publishedDate || '').slice(0, 4), 10) || 0,
+    cover: img ? img.replace(/^http:/, 'https:') : '' };
 }
+async function fromOpenLibrary(isbn){
+  const j = await fetchJson('https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn + '&format=json&jscmd=data');
+  const v = j['ISBN:' + isbn];
+  if (!v || !v.title) return null;
+  const y = String(v.publish_date || '').match(/\d{4}/);
+  return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).map(a => a.name).join(' & '),
+    pages: v.number_of_pages || 0, year: y ? +y[0] : 0, cover: (v.cover && (v.cover.medium || v.cover.small)) || '' };
+}
+async function fromOpenLibrarySearch(isbn){
+  const j = await fetchJson('https://openlibrary.org/search.json?isbn=' + isbn + '&limit=1&fields=title,author_name,number_of_pages_median,first_publish_year,cover_i');
+  const d = j.docs && j.docs[0];
+  if (!d || !d.title) return null;
+  return { title: d.title, author: (d.author_name || []).join(' & '), pages: d.number_of_pages_median || 0,
+    year: d.first_publish_year || 0, cover: d.cover_i ? 'https://covers.openlibrary.org/b/id/' + d.cover_i + '-M.jpg' : '' };
+}
+// Vraagt alle bronnen tegelijk en vult ontbrekende gegevens aan uit de andere bronnen.
+// Geeft een boek terug, null (nergens gevonden) of 'fout' (geen enkele bron bereikbaar).
+async function lookupIsbn(isbn){
+  const rs = await Promise.allSettled([fromGoogle(isbn), fromOpenLibrary(isbn), fromOpenLibrarySearch(isbn)]);
+  const found = rs.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
+  if (!found.length) return rs.every(r => r.status === 'rejected') ? 'fout' : null;
+  const out = {...found[0]};
+  found.slice(1).forEach(f => ['author','pages','year','cover'].forEach(k => { if (!out[k] && f[k]) out[k] = f[k]; }));
+  return out;
+}
+let lookupFilled = false;
 async function doLookup(){
   const isbn = cleanIsbn($('#fIsbn').value), msg = $('#lookupMsg');
   if (!validIsbn(isbn)){ msg.textContent = 'Dit is geen geldig ISBN (10 of 13 cijfers).'; return; }
   $('#fIsbn').value = isbn; msg.textContent = 'Bezig met opzoeken…'; $('#lookupBtn').disabled = true;
   const r = await lookupIsbn(isbn);
   $('#lookupBtn').disabled = false;
-  if (!r){ msg.textContent = 'Niet gevonden. Vul de titel en schrijver hieronder zelf in.'; $('#fTitle').focus(); return; }
+  if (!r || r === 'fout'){
+    if (lookupFilled){ ['#fTitle','#fAuthor','#fPages','#fYear','#fCover'].forEach(s => $(s).value = ''); lookupFilled = false; }
+    msg.textContent = (r === 'fout' ? 'De boekendatabase is nu niet bereikbaar.' : 'Dit boek staat niet in de boekendatabase.') + ' Vul de titel en schrijver hieronder zelf in en tik op Opslaan.';
+    $('#fTitle').focus(); return;
+  }
   $('#fTitle').value = r.title; $('#fAuthor').value = r.author;
   $('#fPages').value = r.pages || ''; $('#fYear').value = r.year || ''; $('#fCover').value = r.cover || '';
-  msg.textContent = 'Gevonden ✓ Controleer de gegevens en tik op Opslaan.';
+  lookupFilled = true;
+  msg.textContent = r.author ? 'Gevonden ✓ Controleer de gegevens en tik op Opslaan.' : 'Titel gevonden ✓ Vul de schrijver nog zelf in.';
+  if (!r.author) $('#fAuthor').focus();
 }
 $('#lookupBtn').onclick = doLookup;
 $('#fIsbn').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); doLookup(); } });
