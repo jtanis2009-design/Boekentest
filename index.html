@@ -619,11 +619,18 @@ const cleanIsbn = s => String(s || '').toUpperCase().replace(/[^0-9X]/g, '');
 const validIsbn = s => /^(97[89]\d{10}|\d{9}[\dX])$/.test(s);
 async function fetchJson(url){
   const c = new AbortController(), t = setTimeout(() => c.abort(), 8000);
-  try{ const r = await fetch(url, {signal: c.signal}); if (!r.ok) throw new Error(r.status); return await r.json(); }
+  try{ const r = await fetch(url, {signal: c.signal}); if (!r.ok) throw new Error('code ' + r.status); return await r.json(); }
   finally{ clearTimeout(t); }
 }
 async function fromGoogle(isbn){
-  const j = await fetchJson('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&country=NL');
+  const url = 'https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&country=NL';
+  let j;
+  try{ j = await fetchJson(url); }
+  catch(e){
+    // Zonder sleutel weigert Google soms; probeer het dan met de sleutel van je eigen project.
+    if (!(cfg && cfg.apiKey) || !/code (403|429)/.test(e.message)) throw e;
+    j = await fetchJson(url + '&key=' + encodeURIComponent(cfg.apiKey));
+  }
   const v = j.items && j.items[0] && j.items[0].volumeInfo;
   if (!v || !v.title) return null;
   const img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
@@ -648,8 +655,13 @@ async function fromOpenLibrarySearch(isbn){
 }
 // Vraagt alle bronnen tegelijk en vult ontbrekende gegevens aan uit de andere bronnen.
 // Geeft een boek terug, null (nergens gevonden) of 'fout' (geen enkele bron bereikbaar).
+let lookupDetail = '';
 async function lookupIsbn(isbn){
+  const names = ['Google Books', 'Open Library', 'Open Library zoeken'];
   const rs = await Promise.allSettled([fromGoogle(isbn), fromOpenLibrary(isbn), fromOpenLibrarySearch(isbn)]);
+  lookupDetail = rs.map((r, i) => names[i] + ': ' + (r.status === 'rejected'
+    ? 'fout (' + (r.reason && r.reason.name === 'AbortError' ? 'te traag' : (r.reason && r.reason.message) || 'onbekend') + ')'
+    : r.value ? 'gevonden' : 'niet gevonden')).join(' · ');
   const found = rs.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
   if (!found.length) return rs.every(r => r.status === 'rejected') ? 'fout' : null;
   const out = {...found[0]};
@@ -665,7 +677,7 @@ async function doLookup(){
   $('#lookupBtn').disabled = false;
   if (!r || r === 'fout'){
     if (lookupFilled){ ['#fTitle','#fAuthor','#fPages','#fYear','#fCover'].forEach(s => $(s).value = ''); lookupFilled = false; }
-    msg.textContent = (r === 'fout' ? 'De boekendatabase is nu niet bereikbaar.' : 'Dit boek staat niet in de boekendatabase.') + ' Vul de titel en schrijver hieronder zelf in en tik op Opslaan.';
+    msg.textContent = (r === 'fout' ? 'De boekendatabase is nu niet bereikbaar.' : 'Dit boek staat niet in de boekendatabase.') + ' Vul de titel en schrijver hieronder zelf in en tik op Opslaan. [' + lookupDetail + ']';
     $('#fTitle').focus(); return;
   }
   $('#fTitle').value = r.title; $('#fAuthor').value = r.author;
