@@ -586,8 +586,8 @@ function renderList(){
     const cover = src ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
     const sum = b.summary ? `<div class="s">${esc(b.summary)}</div>` : '';
     const meta = [`<span class="tag">${STATUS[b.status] || ''}</span>`];
-    if (b.status === 'gelezen' && b.dateRead) meta.push(esc(nlDate(b.dateRead)));
-    if (b.pages) meta.push(esc(b.pages) + " blz.");
+    if (b.status === 'gelezen' && b.dateRead) meta.push('<span>' + esc(nlDate(b.dateRead)) + '</span>');
+    if (b.pages) meta.push('<span>' + esc(b.pages) + ' blz.</span>');
     if (b.rating) meta.push(`<span class="stars-s">${'★'.repeat(b.rating)}</span>`);
     return `<button class="book" data-id="${esc(b.id)}">
       <div class="cover">${esc((b.title || '?').charAt(0).toUpperCase())}${cover}</div>
