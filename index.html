@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="nl" data-theme="blauw">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boekenchecker</title>
+<meta name="description" content="Houd bij welke boeken je hebt gelezen.">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{
+  --bg:#f5f6f8; --card:#ffffff; --text:#16181d; --muted:#6b7280; --line:#e3e5ea;
+  --accent:#2563eb; --on-accent:#ffffff; --soft:rgba(37,99,235,.12);
+  --danger:#dc2626; --radius:14px;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#101216; --card:#1a1d23; --text:#f1f2f4; --muted:#9aa1ad; --line:#2b2f38; }
+}
+[data-theme="rood"]     { --accent:#dc2626; --on-accent:#fff; --soft:rgba(220,38,38,.14); }
+[data-theme="oranje"]   { --accent:#ea580c; --on-accent:#fff; --soft:rgba(234,88,12,.14); }
+[data-theme="geel"]     { --accent:#eab308; --on-accent:#1a1400; --soft:rgba(234,179,8,.18); }
+[data-theme="groen"]    { --accent:#16a34a; --on-accent:#fff; --soft:rgba(22,163,74,.14); }
+[data-theme="turquoise"]{ --accent:#0d9488; --on-accent:#fff; --soft:rgba(13,148,136,.14); }
+[data-theme="blauw"]    { --accent:#2563eb; --on-accent:#fff; --soft:rgba(37,99,235,.14); }
+[data-theme="paars"]    { --accent:#7c3aed; --on-accent:#fff; --soft:rgba(124,58,237,.14); }
+[data-theme="roze"]     { --accent:#db2777; --on-accent:#fff; --soft:rgba(219,39,119,.14); }
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);
+  font-size:16px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+.wrap{max-width:640px;margin:0 auto;padding:14px 14px 96px}
+header.top{position:sticky;top:0;z-index:5;background:var(--accent);color:var(--on-accent);
+  padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top))}
+header.top .in{max-width:640px;margin:0 auto;display:flex;align-items:center;gap:10px}
+header.top h1{font-size:19px;margin:0;font-weight:700;flex:1}
+header.top img{width:28px;height:28px;border-radius:7px;background:#fff2}
+.badge-mode{font-size:12px;background:#0003;padding:3px 8px;border-radius:99px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+h2{font-size:17px;margin:4px 0 10px}
+h3{font-size:14px;margin:0 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);
+  border-radius:10px;padding:11px 12px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+textarea{min-height:70px;resize:vertical}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:11px 14px;font-weight:600;
+  background:var(--accent);color:var(--on-accent)}
+button.ghost{background:var(--soft);color:var(--text)}
+button.plain{background:transparent;color:var(--accent);padding:8px}
+button.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+button:disabled{opacity:.55}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.row>.fit{flex:0 0 auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.muted{color:var(--muted);font-size:13px}
+.center{text-align:center}
+
+/* navigatie onderaan */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs .in{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+nav.tabs button{background:none;color:var(--muted);border-radius:0;padding:9px 2px 10px;font-size:12px;font-weight:600;
+  display:flex;flex-direction:column;align-items:center;gap:3px}
+nav.tabs button svg{width:23px;height:23px}
+nav.tabs button.on{color:var(--accent)}
+
+/* boekenlijst */
+.chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;margin-top:10px}
+.chip{flex:0 0 auto;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:99px;
+  padding:6px 12px;font-size:13px;font-weight:600}
+.chip.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.book{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);padding:10px;margin-bottom:8px;cursor:pointer;width:100%;text-align:left;color:var(--text);font-weight:400}
+.cover{flex:0 0 52px;width:52px;height:76px;border-radius:6px;background:var(--soft);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;overflow:hidden}
+.cover img{width:100%;height:100%;object-fit:cover}
+.book .t{font-weight:700;line-height:1.25}
+.book .a{color:var(--muted);font-size:14px;margin-top:2px}
+.book .m{font-size:12.5px;color:var(--muted);margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag{background:var(--soft);color:var(--text);border-radius:99px;padding:2px 8px;font-weight:600}
+.stars-s{color:var(--accent);letter-spacing:1px}
+.empty{text-align:center;color:var(--muted);padding:34px 10px}
+
+/* sterren invoer */
+.stars{display:flex;gap:4px}
+.stars button{background:none;color:var(--line);font-size:30px;padding:0 2px;line-height:1}
+.stars button.on{color:var(--accent)}
+
+/* statistieken */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 8px;text-align:center}
+.kpi b{display:block;font-size:28px;color:var(--accent);line-height:1.1}
+.kpi span{font-size:12.5px;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;margin-bottom:12px}
+.seg button{background:none;color:var(--muted);padding:7px 4px;font-size:13.5px;border-radius:8px}
+.seg button.on{background:var(--accent);color:var(--on-accent)}
+.bars{display:flex;align-items:flex-end;gap:4px;height:150px}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.bar i{display:block;width:100%;background:var(--accent);border-radius:5px 5px 0 0;min-height:2px}
+.bar i.zero{background:var(--line)}
+.bar em{font-style:normal;font-size:11px;color:var(--muted);margin-bottom:2px}
+.bar span{font-size:10.5px;color:var(--muted);margin-top:4px;white-space:nowrap}
+.author{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);
+  background:none;color:var(--text);width:100%;text-align:left;border-radius:0;font-weight:400}
+.author:last-child{border-bottom:0}
+.author .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.author .c{flex:0 0 auto;background:var(--soft);border-radius:99px;padding:2px 10px;font-weight:700;font-size:14px}
+.author .meter{flex:0 0 70px;height:6px;background:var(--line);border-radius:9px;overflow:hidden}
+.author .meter i{display:block;height:100%;background:var(--accent)}
+
+/* thema's */
+.themes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.theme{background:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--text);font-size:12.5px;font-weight:600}
+.theme i{width:46px;height:46px;border-radius:50%;display:block;border:3px solid var(--card);box-shadow:0 0 0 2px var(--line)}
+.theme.on i{box-shadow:0 0 0 3px var(--text)}
+
+/* inloggen */
+.auth{max-width:420px;margin:28px auto;padding:0 14px}
+.auth .logo{width:84px;height:84px;border-radius:20px;display:block;margin:0 auto 12px}
+.auth h2{text-align:center;font-size:22px;margin-bottom:2px}
+.err{color:var(--danger);font-size:14px;margin-top:10px;min-height:20px}
+.divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin:14px 0}
+.divider:before,.divider:after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* scanner */
+.scanner{position:fixed;inset:0;z-index:20;background:#000;display:flex;flex-direction:column}
+.scanner video{flex:1;width:100%;object-fit:cover;min-height:0}
+.scanner .frame{position:absolute;left:10%;right:10%;top:38%;height:22%;border:3px solid #fff;border-radius:14px;
+  box-shadow:0 0 0 2000px rgba(0,0,0,.45);pointer-events:none}
+.scanner .hint{position:absolute;left:0;right:0;top:calc(38% - 46px);text-align:center;color:#fff;font-weight:600;padding:0 20px}
+.scanner .bottom{padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));background:#000}
+.scanner .bottom button{width:100%;background:#fff;color:#000}
+
+.toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:30;background:var(--text);color:var(--bg);
+  padding:10px 16px;border-radius:99px;font-size:14px;font-weight:600;max-width:90%;text-align:center;opacity:0;
+  transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.notice{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:13.5px;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="in">
+  <img src="icon.svg" alt="">
+  <h1>Boekenchecker</h1>
+  <span class="badge-mode" id="modeBadge" hidden>Lokaal</span>
+</div></header>
+
+<!-- Inloggen / registreren -->
+<section class="auth" id="authView" hidden>
+  <img class="logo" src="icon.svg" alt="">
+  <h2 id="authTitle">Inloggen</h2>
+  <p class="muted center" id="authSub">Log in om je boeken op elk apparaat te zien.</p>
+  <div class="card">
+    <form id="authForm">
+      <div id="nameRow" hidden>
+        <label for="authName">Naam</label>
+        <input id="authName" autocomplete="name" placeholder="Je naam">
+      </div>
+      <label for="authEmail">E-mailadres</label>
+      <input id="authEmail" type="email" autocomplete="email" required placeholder="naam@voorbeeld.nl">
+      <label for="authPass">Wachtwoord</label>
+      <input id="authPass" type="password" autocomplete="current-password" required minlength="6" placeholder="Minimaal 6 tekens">
+      <div class="err" id="authErr"></div>
+      <button type="submit" id="authSubmit" style="width:100%">Inloggen</button>
+    </form>
+    <div class="divider">of</div>
+    <button class="ghost" id="googleBtn" style="width:100%">Doorgaan met Google</button>
+    <div class="center" style="margin-top:10px">
+      <button class="plain" id="authSwitch">Nog geen account? Maak er een aan</button><br>
+      <button class="plain" id="authReset">Wachtwoord vergeten?</button>
+    </div>
+  </div>
+</section>
+
+<main class="wrap" id="app" hidden>
+
+  <!-- BOEKEN -->
+  <section id="view-boeken">
+    <div class="card">
+      <div class="row">
+        <input id="q" type="search" placeholder="Zoeken…" autocomplete="off">
+        <select id="qField" class="fit" style="width:auto" aria-label="Zoeken in">
+          <option value="alles">Alles</option>
+          <option value="titel">Titel</option>
+          <option value="schrijver">Schrijver</option>
+        </select>
+      </div>
+      <div class="chips" id="statusChips"></div>
+      <div class="row" style="margin-top:8px">
+        <span class="muted" id="countLabel"></span>
+        <select id="sort" class="fit" style="width:auto;padding:7px 10px;font-size:14px" aria-label="Sorteren">
+          <option value="nieuw">Laatst toegevoegd</option>
+          <option value="gelezen">Laatst gelezen</option>
+          <option value="titel">Titel A–Z</option>
+          <option value="schrijver">Schrijver A–Z</option>
+          <option value="sterren">Hoogste beoordeling</option>
+        </select>
+      </div>
+    </div>
+    <div id="bookList"></div>
+  </section>
+
+  <!-- TOEVOEGEN / BEWERKEN -->
+  <section id="view-toevoegen" hidden>
+    <div class="card">
+      <h2 id="formTitle">Boek toevoegen</h2>
+      <button id="scanBtn" style="width:100%">📷 Scan de barcode</button>
+      <label for="fIsbn">ISBN (het nummer bij de barcode)</label>
+      <div class="row">
+        <input id="fIsbn" inputmode="numeric" placeholder="978…" autocomplete="off">
+        <button class="ghost fit" id="lookupBtn">Opzoeken</button>
+      </div>
+      <div class="muted" id="lookupMsg" style="margin-top:6px"></div>
+    </div>
+    <form class="card" id="bookForm">
+      <label for="fTitle">Titel *</label>
+      <input id="fTitle" required autocomplete="off">
+      <label for="fAuthor">Schrijver *</label>
+      <input id="fAuthor" required autocomplete="off" list="authorList" placeholder="Meerdere schrijvers? Scheid met &amp;">
+      <datalist id="authorList"></datalist>
+      <div class="grid2">
+        <div><label for="fPages">Pagina's</label><input id="fPages" type="number" min="0" inputmode="numeric"></div>
+        <div><label for="fYear">Jaar van uitgave</label><input id="fYear" type="number" min="0" max="2100" inputmode="numeric"></div>
+      </div>
+      <div class="grid2">
+        <div><label for="fStatus">Status</label>
+          <select id="fStatus">
+            <option value="gelezen">Gelezen</option>
+            <option value="bezig">Bezig met lezen</option>
+            <option value="wil">Wil ik lezen</option>
+          </select></div>
+        <div id="dateWrap"><label for="fDate">Uitgelezen op</label><input id="fDate" type="date"></div>
+      </div>
+      <label>Beoordeling</label>
+      <div class="stars" id="fStars"></div>
+      <label for="fNotes">Notities</label>
+      <textarea id="fNotes" placeholder="Wat vond je ervan?"></textarea>
+      <input id="fCover" type="hidden">
+      <div class="row" style="margin-top:14px">
+        <button type="submit" id="saveBtn">Opslaan</button>
+        <button type="button" class="ghost fit" id="cancelBtn">Annuleren</button>
+      </div>
+      <button type="button" class="danger" id="deleteBtn" style="width:100%;margin-top:10px" hidden>Boek verwijderen</button>
+    </form>
+  </section>
+
+  <!-- STATISTIEKEN -->
+  <section id="view-stats" hidden>
+    <div class="kpis">
+      <div class="kpi"><b id="kWeek">0</b><span>deze week</span></div>
+      <div class="kpi"><b id="kMonth">0</b><span>deze maand</span></div>
+      <div class="kpi"><b id="kYear">0</b><span>dit jaar</span></div>
+    </div>
+    <div class="card">
+      <h3>Boeken gelezen</h3>
+      <div class="seg" id="periodSeg">
+        <button data-p="week">Per week</button>
+        <button data-p="maand" class="on">Per maand</button>
+        <button data-p="jaar">Per jaar</button>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="card">
+      <h3>Totaal</h3>
+      <div class="grid2">
+        <div><b id="tBooks" style="font-size:22px">0</b><div class="muted">boeken gelezen</div></div>
+        <div><b id="tPages" style="font-size:22px">0</b><div class="muted">pagina's gelezen</div></div>
+        <div style="margin-top:8px"><b id="tAuthors" style="font-size:22px">0</b><div class="muted">schrijvers</div></div>
+        <div style="margin-top:8px"><b id="tAvg" style="font-size:22px">–</b><div class="muted">gemiddelde beoordeling</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Boeken per schrijver</h3>
+      <input id="authorQ" type="search" placeholder="Zoek een schrijver…" autocomplete="off" style="margin-bottom:6px">
+      <div id="authors"></div>
+    </div>
+  </section>
+
+  <!-- INSTELLINGEN -->
+  <section id="view-instellingen" hidden>
+    <div class="card">
+      <h3>Kleur</h3>
+      <div class="themes" id="themes"></div>
+    </div>
+    <div class="card">
+      <h3>Account</h3>
+      <div id="accountInfo" class="muted" style="margin-bottom:10px"></div>
+      <button class="ghost" id="logoutBtn" style="width:100%" hidden>Uitloggen</button>
+    </div>
+    <div class="card">
+      <h3>Gegevens</h3>
+      <div class="row">
+        <button class="ghost" id="exportBtn">Back-up downloaden</button>
+        <button class="ghost" id="importBtn">Back-up terugzetten</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="muted center">Boekgegevens via Google Books en Open Library.</p>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs" hidden><div class="in">
+  <button data-v="boeken" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21a2 2 0 0 0 2 2h13v-4"/></svg>Boeken</button>
+  <button data-v="toevoegen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Toevoegen</button>
+  <button data-v="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Statistieken</button>
+  <button data-v="instellingen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Instellingen</button>
+</div></nav>
+
+<div class="scanner" id="scanner" hidden>
+  <video id="scanVideo" playsinline muted></video>
+  <div class="hint">Richt de camera op de barcode achterop het boek</div>
+  <div class="frame"></div>
+  <div class="bottom"><button id="scanClose">Sluiten</button></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ls = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+let toastT;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+
+/* ---------- datums ---------- */
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const today = () => ymd(new Date());
+function monday(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function isoWeek(d){ const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day); const y0 = new Date(Date.UTC(x.getUTCFullYear(), 0, 1)); return Math.ceil(((x - y0) / 864e5 + 1) / 7); }
+const nlDate = s => { const d = new Date(s + 'T00:00'); return isNaN(d) ? '' : d.toLocaleDateString('nl-NL', {day:'numeric', month:'short', year:'numeric'}); };
+const MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+const STATUS = {gelezen:'Gelezen', bezig:'Bezig', wil:'Wil ik lezen'};
+
+/* ---------- thema ---------- */
+const THEMES = [['rood','Rood','#dc2626'],['oranje','Oranje','#ea580c'],['geel','Geel','#eab308'],['groen','Groen','#16a34a'],
+                ['turquoise','Turquoise','#0d9488'],['blauw','Blauw','#2563eb'],['paars','Paars','#7c3aed'],['roze','Roze','#db2777']];
+function setTheme(id){
+  const t = THEMES.find(x => x[0] === id) || THEMES[5];
+  document.documentElement.dataset.theme = t[0];
+  document.querySelector('meta[name=theme-color]').content = t[2];
+  ls.set('bc_theme', t[0]);
+  $('#themes').innerHTML = THEMES.map(x => `<button class="theme ${x[0] === t[0] ? 'on' : ''}" data-t="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('');
+}
+$('#themes').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) setTheme(b.dataset.t); });
+
+/* ---------- opslag: Firebase of lokaal ---------- */
+const cfg = window.FIREBASE_CONFIG;
+const CLOUD = !!(cfg && cfg.apiKey && !/^PLAK/i.test(cfg.apiKey) && window.firebase);
+let books = [], auth = null, db = null, col = null, unsub = null, user = null;
+
+const store = {
+  save(id, data){
+    if (CLOUD){
+      const ref = id ? col.doc(id) : col.doc();
+      ref.set(data).catch(e => toast('Opslaan mislukt: ' + e.message));
+    } else {
+      if (id){ const i = books.findIndex(b => b.id === id); if (i >= 0) books[i] = {id, ...data}; }
+      else books.push({id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...data});
+      ls.set('bc_books', books); renderAll();
+    }
+  },
+  remove(id){
+    if (CLOUD) col.doc(id).delete().catch(e => toast('Verwijderen mislukt: ' + e.message));
+    else { books = books.filter(b => b.id !== id); ls.set('bc_books', books); renderAll(); }
+  }
+};
+
+function startApp(){
+  $('#authView').hidden = true; $('#app').hidden = false; $('#tabs').hidden = false;
+  $('#modeBadge').hidden = CLOUD;
+  $('#logoutBtn').hidden = !CLOUD;
+  $('#accountInfo').textContent = CLOUD
+    ? 'Ingelogd als ' + (user.displayName ? user.displayName + ' (' + user.email + ')' : user.email)
+    : 'Lokale modus: je boeken staan alleen op dit apparaat. Vul firebase-config.js in om accounts aan te zetten.';
+  renderAll();
+}
+
+if (CLOUD){
+  firebase.initializeApp(cfg);
+  auth = firebase.auth(); db = firebase.firestore();
+  auth.languageCode = 'nl';
+  db.enablePersistence({synchronizeTabs: true}).catch(() => {});
+  auth.onAuthStateChanged(u => {
+    if (unsub){ unsub(); unsub = null; }
+    user = u; books = [];
+    if (!u){ $('#app').hidden = true; $('#tabs').hidden = true; $('#authView').hidden = false; return; }
+    col = db.collection('users').doc(u.uid).collection('books');
+    unsub = col.onSnapshot(s => { books = s.docs.map(d => ({id: d.id, ...d.data()})); renderAll(); },
+      e => toast('Kan boeken niet laden: ' + e.message));
+    startApp();
+  });
+} else {
+  books = ls.get('bc_books', []);
+}
+
+/* ---------- inloggen ---------- */
+let registerMode = false;
+const AUTH_ERR = {
+  'auth/invalid-email':'Dit e-mailadres klopt niet.',
+  'auth/user-not-found':'Er bestaat geen account met dit e-mailadres.',
+  'auth/wrong-password':'Het wachtwoord klopt niet.',
+  'auth/invalid-credential':'E-mailadres of wachtwoord klopt niet.',
+  'auth/invalid-login-credentials':'E-mailadres of wachtwoord klopt niet.',
+  'auth/email-already-in-use':'Er bestaat al een account met dit e-mailadres.',
+  'auth/weak-password':'Kies een wachtwoord van minimaal 6 tekens.',
+  'auth/too-many-requests':'Te veel pogingen. Probeer het later opnieuw.',
+  'auth/network-request-failed':'Geen internetverbinding.',
+  'auth/popup-closed-by-user':'Inloggen geannuleerd.',
+  'auth/operation-not-allowed':'Deze manier van inloggen staat nog niet aan in Firebase.',
+  'auth/unauthorized-domain':'Dit domein is nog niet toegestaan in Firebase (Authentication → Settings → Authorized domains).'
+};
+const authMsg = e => AUTH_ERR[e.code] || 'Er ging iets mis. Probeer het opnieuw.';
+function setAuthMode(reg){
+  registerMode = reg;
+  $('#authTitle').textContent = reg ? 'Account aanmaken' : 'Inloggen';
+  $('#authSub').textContent = reg ? 'Maak een gratis account voor je eigen boekenlijst.' : 'Log in om je boeken op elk apparaat te zien.';
+  $('#authSubmit').textContent = reg ? 'Account aanmaken' : 'Inloggen';
+  $('#authSwitch').textContent = reg ? 'Heb je al een account? Log in' : 'Nog geen account? Maak er een aan';
+  $('#nameRow').hidden = !reg; $('#authReset').hidden = reg;
+  $('#authPass').autocomplete = reg ? 'new-password' : 'current-password';
+  $('#authErr').textContent = '';
+}
+$('#authSwitch').onclick = () => setAuthMode(!registerMode);
+$('#authForm').onsubmit = async e => {
+  e.preventDefault();
+  const email = $('#authEmail').value.trim(), pass = $('#authPass').value, btn = $('#authSubmit');
+  $('#authErr').textContent = ''; btn.disabled = true;
+  try{
+    if (registerMode){
+      const r = await auth.createUserWithEmailAndPassword(email, pass);
+      const name = $('#authName').value.trim();
+      if (name) await r.user.updateProfile({displayName: name});
+    } else await auth.signInWithEmailAndPassword(email, pass);
+    $('#authPass').value = '';
+  }catch(err){ $('#authErr').textContent = authMsg(err); }
+  btn.disabled = false;
+};
+$('#googleBtn').onclick = async () => {
+  $('#authErr').textContent = '';
+  try{ await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+  catch(err){ $('#authErr').textContent = authMsg(err); }
+};
+$('#authReset').onclick = async () => {
+  const email = $('#authEmail').value.trim();
+  if (!email){ $('#authErr').textContent = 'Vul eerst je e-mailadres in.'; return; }
+  try{ await auth.sendPasswordResetEmail(email); toast('E-mail verstuurd om je wachtwoord te herstellen.'); }
+  catch(err){ $('#authErr').textContent = authMsg(err); }
+};
+$('#logoutBtn').onclick = () => { if (confirm('Wil je uitloggen?')) auth.signOut(); };
+
+/* ---------- navigatie ---------- */
+let view = 'boeken';
+function go(v){
+  view = v;
+  ['boeken','toevoegen','stats','instellingen'].forEach(x => $('#view-' + x).hidden = x !== v);
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  window.scrollTo(0, 0);
+}
+$('#tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-v]'); if (!b) return;
+  if (b.dataset.v === 'toevoegen') resetForm();
+  go(b.dataset.v);
+});
+
+/* ---------- boekenlijst ---------- */
+let statusFilter = 'alle';
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function renderList(){
+  const counts = {alle: books.length, gelezen: 0, bezig: 0, wil: 0};
+  books.forEach(b => { if (counts[b.status] != null) counts[b.status]++; });
+  $('#statusChips').innerHTML = [['alle','Alle'],['gelezen','Gelezen'],['bezig','Bezig'],['wil','Wil ik lezen']]
+    .map(([k, l]) => `<button class="chip ${statusFilter === k ? 'on' : ''}" data-s="${k}">${l} (${counts[k]})</button>`).join('');
+
+  const q = norm($('#q').value.trim()), field = $('#qField').value;
+  let list = books.filter(b => {
+    if (statusFilter !== 'alle' && b.status !== statusFilter) return false;
+    if (!q) return true;
+    const t = norm(b.title), a = norm(b.author);
+    if (field === 'titel') return t.includes(q);
+    if (field === 'schrijver') return a.includes(q);
+    return t.includes(q) || a.includes(q) || String(b.isbn || '').includes(q);
+  });
+  const by = {
+    nieuw: (a, b) => (b.addedAt || 0) - (a.addedAt || 0),
+    gelezen: (a, b) => String(b.dateRead || '').localeCompare(String(a.dateRead || '')),
+    titel: (a, b) => String(a.title).localeCompare(String(b.title), 'nl'),
+    schrijver: (a, b) => String(a.author).localeCompare(String(b.author), 'nl') || String(a.title).localeCompare(String(b.title), 'nl'),
+    sterren: (a, b) => (b.rating || 0) - (a.rating || 0)
+  };
+  list.sort(by[$('#sort').value] || by.nieuw);
+  $('#countLabel').textContent = list.length + (list.length === 1 ? ' boek' : ' boeken');
+
+  if (!list.length){
+    $('#bookList').innerHTML = `<div class="empty">${books.length ? 'Geen boeken gevonden.' : 'Nog geen boeken.<br>Tik op <b>Toevoegen</b> om je eerste boek te scannen.'}</div>`;
+    return;
+  }
+  $('#bookList').innerHTML = list.map(b => {
+    const cover = b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+    const meta = [`<span class="tag">${STATUS[b.status] || ''}</span>`];
+    if (b.status === 'gelezen' && b.dateRead) meta.push(esc(nlDate(b.dateRead)));
+    if (b.pages) meta.push(esc(b.pages) + " blz.");
+    if (b.rating) meta.push(`<span class="stars-s">${'★'.repeat(b.rating)}</span>`);
+    return `<button class="book" data-id="${esc(b.id)}">
+      <div class="cover">${esc((b.title || '?').charAt(0).toUpperCase())}${cover}</div>
+      <div style="min-width:0;flex:1"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div><div class="m">${meta.join('')}</div></div>
+    </button>`;
+  }).join('');
+}
+$('#statusChips').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (b){ statusFilter = b.dataset.s; renderList(); } });
+$('#q').addEventListener('input', renderList);
+$('#qField').addEventListener('change', renderList);
+$('#sort').addEventListener('change', renderList);
+$('#bookList').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (b) editBook(b.dataset.id); });
+
+/* ---------- formulier ---------- */
+let editId = null, rating = 0;
+function drawStars(){ $('#fStars').innerHTML = [1,2,3,4,5].map(n => `<button type="button" data-n="${n}" class="${n <= rating ? 'on' : ''}" aria-label="${n} sterren">★</button>`).join(''); }
+$('#fStars').addEventListener('click', e => { const b = e.target.closest('[data-n]'); if (!b) return; const n = +b.dataset.n; rating = rating === n ? 0 : n; drawStars(); });
+function syncDate(){
+  const read = $('#fStatus').value === 'gelezen';
+  $('#dateWrap').style.visibility = read ? 'visible' : 'hidden';
+  if (read && !$('#fDate').value) $('#fDate').value = today();
+}
+$('#fStatus').addEventListener('change', syncDate);
+function resetForm(){
+  editId = null; rating = 0;
+  $('#bookForm').reset(); $('#fIsbn').value = ''; $('#fCover').value = ''; $('#lookupMsg').textContent = '';
+  $('#formTitle').textContent = 'Boek toevoegen'; $('#deleteBtn').hidden = true; $('#saveBtn').textContent = 'Opslaan';
+  $('#fDate').value = today(); drawStars(); syncDate();
+}
+function editBook(id){
+  const b = books.find(x => x.id === id); if (!b) return;
+  resetForm(); editId = id; rating = b.rating || 0;
+  $('#formTitle').textContent = 'Boek bewerken'; $('#deleteBtn').hidden = false; $('#saveBtn').textContent = 'Wijzigingen opslaan';
+  $('#fIsbn').value = b.isbn || ''; $('#fTitle').value = b.title || ''; $('#fAuthor').value = b.author || '';
+  $('#fPages').value = b.pages || ''; $('#fYear').value = b.year || ''; $('#fStatus').value = b.status || 'gelezen';
+  $('#fDate').value = b.dateRead || ''; $('#fNotes').value = b.notes || ''; $('#fCover').value = b.cover || '';
+  drawStars(); syncDate(); go('toevoegen');
+}
+$('#bookForm').onsubmit = e => {
+  e.preventDefault();
+  const status = $('#fStatus').value, isbn = cleanIsbn($('#fIsbn').value);
+  const title = $('#fTitle').value.trim(), author = $('#fAuthor').value.trim();
+  if (!title || !author) return;
+  if (!editId){
+    const dup = books.find(b => (isbn && b.isbn === isbn) || (norm(b.title) === norm(title) && norm(b.author) === norm(author)));
+    if (dup && !confirm('"' + dup.title + '" staat al in je lijst. Toch nog een keer toevoegen?')) return;
+  }
+  const old = editId ? books.find(b => b.id === editId) : null;
+  store.save(editId, {
+    title, author, isbn,
+    pages: parseInt($('#fPages').value, 10) || 0,
+    year: parseInt($('#fYear').value, 10) || 0,
+    status,
+    dateRead: status === 'gelezen' ? ($('#fDate').value || today()) : '',
+    rating, notes: $('#fNotes').value.trim(), cover: $('#fCover').value,
+    addedAt: old && old.addedAt ? old.addedAt : Date.now()
+  });
+  toast(editId ? 'Boek bijgewerkt' : 'Boek toegevoegd');
+  resetForm(); go('boeken');
+};
+$('#cancelBtn').onclick = () => { resetForm(); go('boeken'); };
+$('#deleteBtn').onclick = () => {
+  if (!editId || !confirm('Dit boek verwijderen?')) return;
+  store.remove(editId); toast('Boek verwijderd'); resetForm(); go('boeken');
+};
+
+/* ---------- ISBN opzoeken ---------- */
+const cleanIsbn = s => String(s || '').toUpperCase().replace(/[^0-9X]/g, '');
+const validIsbn = s => /^(97[89]\d{10}|\d{9}[\dX])$/.test(s);
+async function fetchJson(url){
+  const c = new AbortController(), t = setTimeout(() => c.abort(), 8000);
+  try{ const r = await fetch(url, {signal: c.signal}); if (!r.ok) throw new Error(r.status); return await r.json(); }
+  finally{ clearTimeout(t); }
+}
+async function lookupIsbn(isbn){
+  try{
+    const j = await fetchJson('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn);
+    const v = j.items && j.items[0] && j.items[0].volumeInfo;
+    if (v && v.title){
+      const img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
+      return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).join(' & '),
+        pages: v.pageCount || 0, year: parseInt(String(v.publishedDate || '').slice(0, 4), 10) || 0,
+        cover: img ? img.replace(/^http:/, 'https:') : '' };
+    }
+  }catch(e){}
+  try{
+    const j = await fetchJson('https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn + '&format=json&jscmd=data');
+    const v = j['ISBN:' + isbn];
+    if (v && v.title){
+      const y = String(v.publish_date || '').match(/\d{4}/);
+      return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).map(a => a.name).join(' & '),
+        pages: v.number_of_pages || 0, year: y ? +y[0] : 0, cover: (v.cover && (v.cover.medium || v.cover.small)) || '' };
+    }
+  }catch(e){}
+  return null;
+}
+async function doLookup(){
+  const isbn = cleanIsbn($('#fIsbn').value), msg = $('#lookupMsg');
+  if (!validIsbn(isbn)){ msg.textContent = 'Dit is geen geldig ISBN (10 of 13 cijfers).'; return; }
+  $('#fIsbn').value = isbn; msg.textContent = 'Bezig met opzoeken…'; $('#lookupBtn').disabled = true;
+  const r = await lookupIsbn(isbn);
+  $('#lookupBtn').disabled = false;
+  if (!r){ msg.textContent = 'Niet gevonden. Vul de titel en schrijver hieronder zelf in.'; $('#fTitle').focus(); return; }
+  $('#fTitle').value = r.title; $('#fAuthor').value = r.author;
+  $('#fPages').value = r.pages || ''; $('#fYear').value = r.year || ''; $('#fCover').value = r.cover || '';
+  msg.textContent = 'Gevonden ✓ Controleer de gegevens en tik op Opslaan.';
+}
+$('#lookupBtn').onclick = doLookup;
+$('#fIsbn').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); doLookup(); } });
+
+/* ---------- barcodescanner ---------- */
+let scanStream = null, scanTimer = null, zxing = null, scanning = false;
+const loadScript = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+async function openScanner(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Camera wordt niet ondersteund. Vul het ISBN zelf in.'); return; }
+  const video = $('#scanVideo'); $('#scanner').hidden = false; scanning = true;
+  const constraints = {audio: false, video: {facingMode: {ideal: 'environment'}}};
+  try{
+    let native = false;
+    if ('BarcodeDetector' in window){
+      try{ native = (await BarcodeDetector.getSupportedFormats()).includes('ean_13'); }catch(e){}
+    }
+    if (native){
+      scanStream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (!scanning){ stopStream(); return; }
+      video.srcObject = scanStream; await video.play();
+      const det = new BarcodeDetector({formats: ['ean_13']});
+      scanTimer = setInterval(async () => {
+        try{ const r = await det.detect(video); const hit = r.find(x => /^97[89]\d{10}$/.test(x.rawValue)); if (hit) onScan(hit.rawValue); }catch(e){}
+      }, 250);
+    } else {
+      if (!window.ZXing) await loadScript('https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js');
+      if (!scanning) return;
+      zxing = new ZXing.BrowserMultiFormatReader();
+      zxing.decodeFromConstraints(constraints, video, res => { if (res){ const t = res.getText(); if (/^97[89]\d{10}$/.test(t)) onScan(t); } });
+    }
+  }catch(e){
+    closeScanner();
+    toast(e && e.name === 'NotAllowedError' ? 'Geef toestemming voor de camera om te scannen.' : 'Camera starten is niet gelukt. Vul het ISBN zelf in.');
+  }
+}
+function stopStream(){ if (scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; } }
+function closeScanner(){
+  scanning = false; clearInterval(scanTimer); scanTimer = null;
+  if (zxing){ try{ zxing.reset(); }catch(e){} zxing = null; }
+  stopStream(); $('#scanVideo').srcObject = null; $('#scanner').hidden = true;
+}
+function onScan(code){
+  if (!scanning) return;
+  closeScanner();
+  if (navigator.vibrate) navigator.vibrate(60);
+  $('#fIsbn').value = code; doLookup();
+}
+$('#scanBtn').onclick = openScanner;
+$('#scanClose').onclick = closeScanner;
+
+/* ---------- statistieken ---------- */
+let period = 'maand';
+const authorsOf = b => String(b.author || '').split(/\s*(?:&|;)\s*/).map(s => s.trim()).filter(Boolean);
+function renderStats(){
+  const read = books.filter(b => b.status === 'gelezen' && b.dateRead);
+  const now = new Date(), wk = ymd(monday(now)), mo = today().slice(0, 7), yr = today().slice(0, 4);
+  $('#kWeek').textContent = read.filter(b => b.dateRead >= wk).length;
+  $('#kMonth').textContent = read.filter(b => b.dateRead.startsWith(mo)).length;
+  $('#kYear').textContent = read.filter(b => b.dateRead.startsWith(yr)).length;
+
+  let data = [];
+  if (period === 'week'){
+    const m = monday(now);
+    for (let i = 11; i >= 0; i--){
+      const s = new Date(m); s.setDate(s.getDate() - i * 7); const e = new Date(s); e.setDate(e.getDate() + 7);
+      const a = ymd(s), z = ymd(e);
+      data.push({label: 'wk ' + isoWeek(s), n: read.filter(b => b.dateRead >= a && b.dateRead < z).length});
+    }
+  } else if (period === 'maand'){
+    for (let i = 11; i >= 0; i--){
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1), key = d.getFullYear() + '-' + pad(d.getMonth() + 1);
+      data.push({label: MONTHS[d.getMonth()], n: read.filter(b => b.dateRead.startsWith(key)).length});
+    }
+  } else {
+    const years = read.map(b => +b.dateRead.slice(0, 4)).filter(Boolean);
+    const first = Math.max(Math.min(now.getFullYear() - 4, ...years), now.getFullYear() - 11);
+    for (let y = first; y <= now.getFullYear(); y++) data.push({label: String(y), n: read.filter(b => b.dateRead.startsWith(String(y))).length});
+  }
+  const max = Math.max(1, ...data.map(d => d.n));
+  $('#bars').innerHTML = data.map(d => `<div class="bar"><em>${d.n || ''}</em><i class="${d.n ? '' : 'zero'}" style="height:${d.n ? Math.max(4, d.n / max * 100) : 0}%"></i><span>${d.label}</span></div>`).join('');
+
+  const allRead = books.filter(b => b.status === 'gelezen');
+  const rated = allRead.filter(b => b.rating);
+  $('#tBooks').textContent = allRead.length;
+  $('#tPages').textContent = allRead.reduce((s, b) => s + (b.pages || 0), 0).toLocaleString('nl-NL');
+  $('#tAvg').textContent = rated.length ? (rated.reduce((s, b) => s + b.rating, 0) / rated.length).toFixed(1).replace('.', ',') + ' ★' : '–';
+
+  const map = new Map();
+  books.forEach(b => authorsOf(b).forEach(a => { const k = norm(a); const o = map.get(k) || {name: a, n: 0, read: 0}; o.n++; if (b.status === 'gelezen') o.read++; map.set(k, o); }));
+  const all = [...map.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'nl'));
+  $('#tAuthors').textContent = all.length;
+  $('#authorList').innerHTML = all.map(a => `<option value="${esc(a.name)}">`).join('');
+  const aq = norm($('#authorQ').value.trim()), shown = aq ? all.filter(a => norm(a.name).includes(aq)) : all;
+  const top = all.length ? all[0].n : 1;
+  $('#authors').innerHTML = shown.length ? shown.map(a => `<button class="author" data-a="${esc(a.name)}">
+      <span class="n">${esc(a.name)}</span><span class="meter"><i style="width:${a.n / top * 100}%"></i></span>
+      <span class="c" title="${a.read} gelezen">${a.n}</span></button>`).join('')
+    : '<div class="muted" style="padding:8px 0">Geen schrijvers gevonden.</div>';
+}
+$('#periodSeg').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (!b) return; period = b.dataset.p; $$('#periodSeg button').forEach(x => x.classList.toggle('on', x === b)); renderStats(); });
+$('#authorQ').addEventListener('input', renderStats);
+$('#authors').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  $('#q').value = b.dataset.a; $('#qField').value = 'schrijver'; statusFilter = 'alle'; renderList(); go('boeken');
+});
+
+/* ---------- back-up ---------- */
+$('#exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify({app: 'boekenchecker', versie: 1, boeken: books}, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'boekenchecker-backup-' + today() + '.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try{
+    const j = JSON.parse(await f.text()); const list = Array.isArray(j) ? j : j.boeken;
+    if (!Array.isArray(list)) throw 0;
+    const have = new Set(books.map(b => norm(b.title) + '|' + norm(b.author)));
+    let n = 0;
+    list.forEach(b => {
+      if (!b || !b.title || !b.author) return;
+      const k = norm(b.title) + '|' + norm(b.author); if (have.has(k)) return; have.add(k); n++;
+      store.save(null, { title: String(b.title), author: String(b.author), isbn: cleanIsbn(b.isbn), pages: +b.pages || 0, year: +b.year || 0,
+        status: STATUS[b.status] ? b.status : 'gelezen', dateRead: /^\d{4}-\d{2}-\d{2}$/.test(b.dateRead) ? b.dateRead : '',
+        rating: Math.min(5, Math.max(0, +b.rating || 0)), notes: String(b.notes || ''), cover: /^https:\/\//.test(b.cover) ? b.cover : '', addedAt: +b.addedAt || Date.now() });
+    });
+    toast(n + (n === 1 ? ' boek' : ' boeken') + ' teruggezet');
+  }catch(err){ toast('Dit bestand is geen geldige back-up.'); }
+};
+
+/* ---------- start ---------- */
+function renderAll(){ renderList(); renderStats(); }
+setTheme(ls.get('bc_theme', 'blauw'));
+drawStars(); resetForm();
+if (!CLOUD) startApp();
+</script>
+</body>
+</html>
