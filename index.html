@@ -79,9 +79,12 @@ nav.tabs button.on{color:var(--accent)}
   border-radius:var(--radius);padding:10px;margin-bottom:8px;cursor:pointer;width:100%;text-align:left;color:var(--text);font-weight:400}
 .cover{flex:0 0 52px;width:52px;height:76px;border-radius:6px;background:var(--soft);color:var(--accent);
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;overflow:hidden}
-.cover img{width:100%;height:100%;object-fit:cover}
+.cover{position:relative}
+.cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .book .t{font-weight:700;line-height:1.25}
 .book .a{color:var(--muted);font-size:14px;margin-top:2px}
+.book .s{font-size:13px;color:var(--muted);margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cover.big{flex:0 0 78px;width:78px;height:114px;font-size:30px}
 .book .m{font-size:12.5px;color:var(--muted);margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .tag{background:var(--soft);color:var(--text);border-radius:99px;padding:2px 8px;font-weight:600}
 .stars-s{color:var(--accent);letter-spacing:1px}
@@ -271,6 +274,19 @@ service cloud.firestore {
       </div>
       <label>Beoordeling</label>
       <div class="stars" id="fStars"></div>
+      <label>Omslag</label>
+      <div class="row" style="align-items:flex-start">
+        <div class="cover big fit" id="coverPrev"></div>
+        <div>
+          <button type="button" class="ghost" id="coverPhotoBtn" style="width:100%">📷 Foto van omslag</button>
+          <button type="button" class="ghost" id="enrichBtn" style="width:100%;margin-top:8px">Omslag en samenvatting ophalen</button>
+          <button type="button" class="plain" id="coverClearBtn" hidden>Omslag verwijderen</button>
+        </div>
+      </div>
+      <input type="file" id="coverFile" accept="image/*" hidden>
+      <div class="muted" id="enrichMsg" style="margin-top:6px"></div>
+      <label for="fSummary">Samenvatting</label>
+      <textarea id="fSummary" placeholder="Waar gaat het boek over?" style="min-height:96px"></textarea>
       <label for="fNotes">Notities</label>
       <textarea id="fNotes" placeholder="Wat vond je ervan?"></textarea>
       <input id="fCover" type="hidden">
@@ -420,6 +436,10 @@ const store = {
       ls.set('bc_books', books); renderAll();
     }
   },
+  patch(id, patch){
+    if (CLOUD) col.doc(id).update(patch).catch(() => {});
+    else { const b = books.find(x => x.id === id); if (b){ Object.assign(b, patch); ls.set('bc_books', books); renderAll(); } }
+  },
   remove(id){
     if (CLOUD) col.doc(id).delete().catch(dbError);
     else { books = books.filter(b => b.id !== id); ls.set('bc_books', books); renderAll(); }
@@ -562,14 +582,16 @@ function renderList(){
     return;
   }
   $('#bookList').innerHTML = list.map(b => {
-    const cover = b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+    const src = b.cover || olCover(b.isbn);
+    const cover = src ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+    const sum = b.summary ? `<div class="s">${esc(b.summary)}</div>` : '';
     const meta = [`<span class="tag">${STATUS[b.status] || ''}</span>`];
     if (b.status === 'gelezen' && b.dateRead) meta.push(esc(nlDate(b.dateRead)));
     if (b.pages) meta.push(esc(b.pages) + " blz.");
     if (b.rating) meta.push(`<span class="stars-s">${'★'.repeat(b.rating)}</span>`);
     return `<button class="book" data-id="${esc(b.id)}">
       <div class="cover">${esc((b.title || '?').charAt(0).toUpperCase())}${cover}</div>
-      <div style="min-width:0;flex:1"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div><div class="m">${meta.join('')}</div></div>
+      <div style="min-width:0;flex:1"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div>${sum}<div class="m">${meta.join('')}</div></div>
     </button>`;
   }).join('');
 }
@@ -616,10 +638,10 @@ $('#fPrec').addEventListener('change', syncDate);
 function resetForm(){
   editId = null; rating = 0;
   lookupFilled = false;
-  $('#bookForm').reset(); $('#fIsbn').value = ''; $('#fCover').value = ''; $('#lookupMsg').textContent = '';
+  $('#bookForm').reset(); $('#fIsbn').value = ''; $('#fCover').value = ''; $('#lookupMsg').textContent = ''; $('#enrichMsg').textContent = '';
   $('#formTitle').textContent = 'Boek toevoegen'; $('#deleteBtn').hidden = true; $('#saveBtn').textContent = 'Opslaan';
   $('#fPrec').value = 'dag'; $('#fDate').value = today(); $('#fDMonth').value = pad(new Date().getMonth() + 1); $('#fDYear').value = '';
-  drawStars(); syncDate();
+  drawStars(); syncDate(); drawCover();
 }
 function editBook(id){
   const b = books.find(x => x.id === id); if (!b) return;
@@ -627,8 +649,8 @@ function editBook(id){
   $('#formTitle').textContent = 'Boek bewerken'; $('#deleteBtn').hidden = false; $('#saveBtn').textContent = 'Wijzigingen opslaan';
   $('#fIsbn').value = b.isbn || ''; $('#fTitle').value = b.title || ''; $('#fAuthor').value = b.author || '';
   $('#fPages').value = b.pages || ''; $('#fYear').value = b.year || ''; $('#fStatus').value = b.status || 'gelezen';
-  if (b.status === 'gelezen') writeDate(b.dateRead); $('#fNotes').value = b.notes || ''; $('#fCover').value = b.cover || '';
-  drawStars(); syncDate(); go('toevoegen');
+  if (b.status === 'gelezen') writeDate(b.dateRead); $('#fNotes').value = b.notes || ''; $('#fCover').value = b.cover || ''; $('#fSummary').value = b.summary || '';
+  drawStars(); syncDate(); drawCover(); go('toevoegen');
 }
 $('#bookForm').onsubmit = e => {
   e.preventDefault();
@@ -648,7 +670,8 @@ $('#bookForm').onsubmit = e => {
     year: parseInt($('#fYear').value, 10) || 0,
     status,
     dateRead,
-    rating, notes: $('#fNotes').value.trim(), cover: $('#fCover').value,
+    rating, notes: $('#fNotes').value.trim(), cover: $('#fCover').value, summary: $('#fSummary').value.trim(),
+    enriched: !!(old && old.enriched),
     addedAt: old && old.addedAt ? old.addedAt : Date.now()
   });
   toast(editId ? 'Boek bijgewerkt' : 'Boek toegevoegd');
@@ -668,19 +691,45 @@ async function fetchJson(url){
   try{ const r = await fetch(url, {signal: c.signal}); if (!r.ok) throw new Error('code ' + r.status); return await r.json(); }
   finally{ clearTimeout(t); }
 }
-async function fromGoogle(isbn){
-  const url = 'https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&country=NL';
+const olCover = isbn => isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-M.jpg?default=false' : '';
+const imgOk = url => new Promise(ok => { if (!url) return ok(false); const i = new Image(); i.onload = () => ok(i.naturalWidth > 10); i.onerror = () => ok(false); i.src = url; });
+function cleanText(s){
+  const d = new DOMParser().parseFromString(String(s || ''), 'text/html');
+  const t = (d.body.textContent || '').replace(/\s+/g, ' ').trim();
+  return t.length > 1200 ? t.slice(0, 1200).replace(/\s+\S*$/, '') + '…' : t;
+}
+async function googleQuery(q){
+  const url = 'https://www.googleapis.com/books/v1/volumes?q=' + encodeURIComponent(q).replace(/%3A/g, ':') + '&country=NL&maxResults=5';
   // Google vraagt om een sleutel: gebruik die van je eigen project (Books API moet daar aan staan).
   const key = cfg && cfg.apiKey && !/^PLAK/i.test(cfg.apiKey) ? '&key=' + encodeURIComponent(cfg.apiKey) : '';
   let j;
   try{ j = await fetchJson(url + key); }
   catch(e){ if (!key) throw e; j = await fetchJson(url); }
-  const v = j.items && j.items[0] && j.items[0].volumeInfo;
-  if (!v || !v.title) return null;
-  const img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
-  return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).join(' & '),
-    pages: v.pageCount || 0, year: parseInt(String(v.publishedDate || '').slice(0, 4), 10) || 0,
-    cover: img ? img.replace(/^http:/, 'https:') : '' };
+  return (j.items || []).filter(it => it.volumeInfo && it.volumeInfo.title).map(it => {
+    const v = it.volumeInfo, img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
+    return { title: v.title + (v.subtitle ? ': ' + v.subtitle : ''), author: (v.authors || []).join(' & '),
+      pages: v.pageCount || 0, year: parseInt(String(v.publishedDate || '').slice(0, 4), 10) || 0,
+      cover: img ? img.replace(/^http:/, 'https:') : '',
+      summary: cleanText(v.description || (it.searchInfo && it.searchInfo.textSnippet) || '') };
+  });
+}
+async function fromGoogle(isbn){ return (await googleQuery('isbn:' + isbn))[0] || null; }
+// Zoekt ontbrekende omslag, samenvatting, pagina's en jaar bij een boek. Geeft alleen de gevonden velden terug.
+async function enrich(b){
+  const got = {cover: b.cover || '', summary: b.summary || '', pages: b.pages || 0, year: b.year || 0};
+  const take = r => { if (r) ['cover','summary','pages','year'].forEach(k => { if (!got[k] && r[k]) got[k] = r[k]; }); };
+  if (b.isbn && validIsbn(b.isbn)){ const r = await lookupIsbn(b.isbn); if (r && r !== 'fout') take(r); }
+  if ((!got.cover || !got.summary) && b.title){
+    try{
+      const t = norm(b.title).split(':')[0].trim(), a = authorsOf(b)[0] || '';
+      const rs = await googleQuery('intitle:"' + b.title.split(':')[0].trim() + '"' + (a ? ' inauthor:"' + a + '"' : ''));
+      rs.filter(r => { const rt = norm(r.title); return rt.includes(t) || t.includes(rt.split(':')[0].trim()); }).forEach(take);
+    }catch(e){}
+  }
+  if (!got.cover && b.isbn && await imgOk(olCover(b.isbn))) got.cover = olCover(b.isbn);
+  const patch = {};
+  ['cover','summary','pages','year'].forEach(k => { if (got[k] && !b[k]) patch[k] = got[k]; });
+  return patch;
 }
 async function fromOpenLibrary(isbn){
   const j = await fetchJson('https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn + '&format=json&jscmd=data');
@@ -709,7 +758,7 @@ async function lookupIsbn(isbn){
   const found = rs.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
   if (!found.length) return rs.every(r => r.status === 'rejected') ? 'fout' : null;
   const out = {...found[0]};
-  found.slice(1).forEach(f => ['author','pages','year','cover'].forEach(k => { if (!out[k] && f[k]) out[k] = f[k]; }));
+  found.slice(1).forEach(f => ['author','pages','year','cover','summary'].forEach(k => { if (!out[k] && f[k]) out[k] = f[k]; }));
   return out;
 }
 let lookupFilled = false;
@@ -720,17 +769,70 @@ async function doLookup(){
   const r = await lookupIsbn(isbn);
   $('#lookupBtn').disabled = false;
   if (!r || r === 'fout'){
-    if (lookupFilled){ ['#fTitle','#fAuthor','#fPages','#fYear','#fCover'].forEach(s => $(s).value = ''); lookupFilled = false; }
+    if (lookupFilled){ ['#fTitle','#fAuthor','#fPages','#fYear','#fCover','#fSummary'].forEach(s => $(s).value = ''); lookupFilled = false; drawCover(); }
     msg.textContent = (r === 'fout' ? 'De boekendatabase is nu niet bereikbaar.' : 'Dit boek staat niet in de boekendatabase.') + ' Vul de titel en schrijver hieronder zelf in en tik op Opslaan. [' + lookupDetail + ']';
     $('#fTitle').focus(); return;
   }
   $('#fTitle').value = r.title; $('#fAuthor').value = r.author;
-  $('#fPages').value = r.pages || ''; $('#fYear').value = r.year || ''; $('#fCover').value = r.cover || '';
-  lookupFilled = true;
+  $('#fPages').value = r.pages || ''; $('#fYear').value = r.year || ''; $('#fCover').value = r.cover || ''; $('#fSummary').value = r.summary || '';
+  lookupFilled = true; drawCover();
+  if (!r.cover) imgOk(olCover(isbn)).then(ok => { if (ok && !$('#fCover').value && cleanIsbn($('#fIsbn').value) === isbn){ $('#fCover').value = olCover(isbn); drawCover(); } });
   msg.textContent = r.author ? 'Gevonden ✓ Controleer de gegevens en tik op Opslaan.' : 'Titel gevonden ✓ Vul de schrijver nog zelf in.';
   if (!r.author) $('#fAuthor').focus();
 }
 $('#lookupBtn').onclick = doLookup;
+
+/* ---------- omslag en samenvatting ---------- */
+function drawCover(){
+  const src = $('#fCover').value, t = $('#fTitle').value.trim();
+  $('#coverPrev').innerHTML = esc((t || '?').charAt(0).toUpperCase()) + (src ? `<img src="${esc(src)}" alt="" onerror="this.remove()">` : '');
+  $('#coverClearBtn').hidden = !src;
+}
+$('#fTitle').addEventListener('input', drawCover);
+$('#coverClearBtn').onclick = () => { $('#fCover').value = ''; drawCover(); };
+$('#coverPhotoBtn').onclick = () => $('#coverFile').click();
+$('#coverFile').onchange = e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  const img = new Image(), url = URL.createObjectURL(f);
+  img.onload = () => {
+    // Verklein de foto zodat hij klein genoeg is om bij het boek op te slaan.
+    const w = Math.min(240, img.naturalWidth), hgt = Math.round(img.naturalHeight * w / img.naturalWidth);
+    const c = document.createElement('canvas'); c.width = w; c.height = hgt;
+    c.getContext('2d').drawImage(img, 0, 0, w, hgt);
+    $('#fCover').value = c.toDataURL('image/jpeg', 0.72); URL.revokeObjectURL(url); drawCover();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('Deze foto kan niet worden gebruikt.'); };
+  img.src = url;
+};
+$('#enrichBtn').onclick = async () => {
+  const title = $('#fTitle').value.trim(), msg = $('#enrichMsg'), btn = $('#enrichBtn');
+  if (!title && !cleanIsbn($('#fIsbn').value)){ msg.textContent = 'Vul eerst een titel of ISBN in.'; return; }
+  btn.disabled = true; msg.textContent = 'Bezig met zoeken…';
+  let patch = {};
+  try{ patch = await enrich({ isbn: cleanIsbn($('#fIsbn').value), title, author: $('#fAuthor').value.trim(),
+    cover: $('#fCover').value, summary: $('#fSummary').value.trim(), pages: +$('#fPages').value || 0, year: +$('#fYear').value || 0 }); }catch(e){}
+  btn.disabled = false;
+  if (patch.cover) $('#fCover').value = patch.cover;
+  if (patch.summary) $('#fSummary').value = patch.summary;
+  if (patch.pages) $('#fPages').value = patch.pages;
+  if (patch.year) $('#fYear').value = patch.year;
+  drawCover();
+  const missing = [!$('#fCover').value && 'omslag', !$('#fSummary').value.trim() && 'samenvatting'].filter(Boolean);
+  msg.textContent = !missing.length ? 'Omslag en samenvatting staan erbij ✓'
+    : 'Geen ' + missing.join(' en geen ') + ' gevonden. ' + (missing.includes('omslag') ? 'Maak zelf een foto van de omslag' : 'Typ zelf een korte samenvatting') + '.';
+};
+// Vult bij bestaande boeken eenmalig de ontbrekende omslag en samenvatting aan.
+let backfillStarted = false;
+async function backfill(){
+  const todo = books.filter(b => !b.enriched && (!b.cover || !b.summary)).slice(0, 15);
+  for (const b of todo){
+    if (!navigator.onLine) return;
+    let patch = {};
+    try{ patch = await enrich(b); }catch(e){ continue; }
+    if (editId === b.id) continue;
+    store.patch(b.id, {...patch, enriched: true});
+  }
+}
 $('#fIsbn').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); doLookup(); } });
 
 /* ---------- barcodescanner ---------- */
@@ -855,14 +957,17 @@ $('#importFile').onchange = async e => {
       const k = norm(b.title) + '|' + norm(b.author); if (have.has(k)) return; have.add(k); n++;
       store.save(null, { title: String(b.title), author: String(b.author), isbn: cleanIsbn(b.isbn), pages: +b.pages || 0, year: +b.year || 0,
         status: STATUS[b.status] ? b.status : 'gelezen', dateRead: /^\d{4}(-\d{2}(-\d{2})?)?$/.test(b.dateRead) ? b.dateRead : '',
-        rating: Math.min(5, Math.max(0, +b.rating || 0)), notes: String(b.notes || ''), cover: /^https:\/\//.test(b.cover) ? b.cover : '', addedAt: +b.addedAt || Date.now() });
+        rating: Math.min(5, Math.max(0, +b.rating || 0)), notes: String(b.notes || ''), cover: /^(https:\/\/|data:image\/jpeg;base64,)/.test(b.cover) ? b.cover : '', summary: String(b.summary || '').slice(0, 1300), enriched: !!b.enriched, addedAt: +b.addedAt || Date.now() });
     });
     toast(n + (n === 1 ? ' boek' : ' boeken') + ' teruggezet');
   }catch(err){ toast('Dit bestand is geen geldige back-up.'); }
 };
 
 /* ---------- start ---------- */
-function renderAll(){ renderList(); renderStats(); }
+function renderAll(){
+  renderList(); renderStats();
+  if (!backfillStarted && books.length){ backfillStarted = true; setTimeout(backfill, 1500); }
+}
 setTheme(ls.get('bc_theme', 'blauw'));
 drawStars(); resetForm();
 if (!CLOUD) startApp();
