@@ -624,13 +624,11 @@ async function fetchJson(url){
 }
 async function fromGoogle(isbn){
   const url = 'https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&country=NL';
+  // Google vraagt om een sleutel: gebruik die van je eigen project (Books API moet daar aan staan).
+  const key = cfg && cfg.apiKey && !/^PLAK/i.test(cfg.apiKey) ? '&key=' + encodeURIComponent(cfg.apiKey) : '';
   let j;
-  try{ j = await fetchJson(url); }
-  catch(e){
-    // Zonder sleutel weigert Google soms; probeer het dan met de sleutel van je eigen project.
-    if (!(cfg && cfg.apiKey) || !/code (403|429)/.test(e.message)) throw e;
-    j = await fetchJson(url + '&key=' + encodeURIComponent(cfg.apiKey));
-  }
+  try{ j = await fetchJson(url + key); }
+  catch(e){ if (!key) throw e; j = await fetchJson(url); }
   const v = j.items && j.items[0] && j.items[0].volumeInfo;
   if (!v || !v.title) return null;
   const img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
